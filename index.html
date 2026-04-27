@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>クイズゲーム完全版</title>
+
+<style>
+body{
+    margin:0;
+    font-family:sans-serif;
+    background:#111;
+    color:white;
+    text-align:center;
+}
+
+/* ===== ぼかし ===== */
+#main{
+    filter: blur(6px);
+    pointer-events:none;
+}
+
+/* ===== スタート ===== */
+#start{
+    position:fixed;
+    width:100%;
+    height:100%;
+    background:rgba(0,0,0,0.85);
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+    align-items:center;
+}
+
+/* ===== ボタン ===== */
+button{
+    width:90%;
+    max-width:400px;
+    padding:18px;
+    font-size:18px;
+    border:none;
+    border-radius:12px;
+    margin:10px auto;
+    display:block;
+}
+
+/* ===== 選択肢 ===== */
+.choice{
+    background:#333;
+}
+.correct{ background:green !important; }
+.wrong{ background:red !important; }
+
+/* ===== 画面 ===== */
+#menu,#game{ display:none; padding:10px; }
+
+#question{ font-size:20px; margin:15px 0; }
+
+#image{
+    width:50%;
+    max-width:200px;
+    display:none;
+    margin:10px auto;
+}
+
+#timer{
+    margin-top:10px;
+    font-size:18px;
+}
+
+/* スマホ */
+@media (max-width:600px){
+    #question{ font-size:18px; }
+    button{ font-size:20px; padding:20px; }
+}
+</style>
+</head>
+
+<body>
+
+<!-- ===== スタート ===== -->
+<div id="start">
+    <h2>あなたは18歳以上ですか？</h2>
+    <button onclick="firstChoice(true)">はい</button>
+    <button onclick="firstChoice(false)">いいえ</button>
+    <p id="startMsg"></p>
+</div>
+
+<div id="main">
+
+<!-- ===== 難易度 ===== -->
+<div id="menu">
+    <h2>難易度選択</h2>
+    <button onclick="startGame('easy')">かんたん</button>
+    <button id="normalBtn" disabled onclick="startGame('normal')">ふつう</button>
+    <button id="hardBtn" disabled onclick="startGame('hard')">むずかしい</button>
+</div>
+
+<!-- ===== ゲーム ===== -->
+<div id="game">
+    <img id="image">
+    <div id="question"></div>
+    <div id="choices"></div>
+    <div id="timer"></div>
+    <div id="score"></div>
+    <div id="miss"></div>
+    <button id="next">次へ</button>
+</div>
+
+</div>
+
+<script>
+// ===== 状態 =====
+let difficulty="easy";
+let score=0;
+let miss=0;
+let currentAnswer=0;
+
+// 解放（リロードでリセット）
+let unlocked={easy:true,normal:false,hard:false};
+
+// ===== タイマー =====
+let time=10;
+let timer;
+
+// ===== 問題 =====
+const quizData={
+easy: [
+
+{q:"日本の首都は？",c:["大阪","東京","福岡","札幌"],a:1},
+{q:"1+1は？",c:["1","2","3","4"],a:1},
+{q:"地球は何色に見える？",c:["赤","青","緑","黒"],a:1},
+{q:"太陽はどこから昇る？",c:["西","東","南","北"],a:1},
+{q:"1年は何日？",c:["365日","100日","500日","30日"],a:0},
+
+{q:"犬は英語で？",c:["Cat","Dog","Bird","Fish"],a:1},
+{q:"水は何色？",c:["赤","青","透明","緑"],a:2},
+{q:"日本の通貨は？",c:["ドル","円","ユーロ","ウォン"],a:1},
+{q:"信号の進めは何色？",c:["赤","青","緑","黄"],a:2},
+{q:"火は何色？",c:["青","赤","黒","白"],a:1},
+
+{q:"夏は暑い？",c:["はい","いいえ","寒い","雪が降る"],a:0},
+{q:"氷は冷たい？",c:["はい","いいえ","熱い","溶けない"],a:0},
+{q:"空はどこにある？",c:["上","下","横","中"],a:0},
+{q:"鳥は何をする？",c:["泳ぐ","飛ぶ","歩かない","寝るだけ"],a:1},
+{q:"魚はどこで生きる？",c:["空","水","山","砂"],a:1},
+
+{q:"日本語はどこの国？",c:["中国","日本","韓国","アメリカ"],a:1},
+{q:"牛乳の色は？",c:["黒","白","青","赤"],a:1},
+{q:"りんごの色は？",c:["赤","青","紫","透明"],a:0},
+{q:"雪は何色？",c:["黒","白","青","赤"],a:1},
+{q:"学校に行くのは何曜日？",c:["平日","毎日","夜","朝だけ"],a:0},
+
+{q:"電車はどこを走る？",c:["海","空","線路","山"],a:2},
+{q:"太陽は何？",c:["星","石","水","雲"],a:0},
+{q:"月は夜に見える？",c:["はい","いいえ","昼だけ","見えない"],a:0},
+{q:"人は何で呼吸する？",c:["口","鼻","耳","手"],a:1},
+{q:"火を消すとき使うのは？",c:["水","風","土","空気"],a:0},
+
+{q:"朝は何をする？",c:["寝る","起きる","遊ぶ","夜になる"],a:1},
+{q:"夜は暗い？",c:["はい","いいえ","明るい","昼"],a:0},
+{q:"車は何で動く？",c:["ガソリン","水","風","火"],a:0},
+{q:"電気は何をつける？",c:["明かり","水","火","空"],a:0},
+{q:"学校で勉強するのは？",c:["先生","犬","魚","鳥"],a:0}
+
+]
+
+// ===== 音 =====
+function play(s){ new Audio(s).play(); }
+
+// ===== 最初 =====
+function firstChoice(ans){
+    const msg=document.getElementById("startMsg");
+
+    if(ans){
+        msg.textContent="クイズで確かめましょう！！";
+        setTimeout(()=>{
+            document.getElementById("start").style.display="none";
+            document.getElementById("main").style.filter="none";
+            document.getElementById("main").style.pointerEvents="auto";
+            document.getElementById("menu").style.display="block";
+        },1000);
+    }else{
+        msg.textContent="残念";
+    }
+}
+
+// ===== 開始 =====
+function startGame(diff){
+    difficulty=diff;
+    score=0;
+    miss=0;
+
+    document.getElementById("menu").style.display="none";
+    document.getElementById("game").style.display="block";
+
+    nextQuestion();
+}
+
+// ===== 問題 =====
+function nextQuestion(){
+    clearInterval(timer);
+
+    let list=quizData[difficulty];
+    let q=list[Math.floor(Math.random()*list.length)];
+
+    currentAnswer = q.a;
+
+    document.getElementById("question").textContent=q.q;
+
+    let div=document.getElementById("choices");
+    div.innerHTML="";
+
+    q.c.forEach((choice,i)=>{
+        let btn=document.createElement("button");
+        btn.className="choice";
+        btn.textContent=choice;
+        btn.onclick=()=>checkAnswer(i);
+        div.appendChild(btn);
+    });
+
+    document.getElementById("next").style.display="none";
+    updateUI();
+    startTimer();
+}
+
+// ===== タイマー =====
+function startTimer(){
+    time=10;
+    updateTimer();
+
+    timer=setInterval(()=>{
+        time--;
+        updateTimer();
+
+        if(time<=0){
+            clearInterval(timer);
+            timeUp();
+        }
+    },1000);
+}
+
+function updateTimer(){
+    let el=document.getElementById("timer");
+    el.textContent="残り: "+time;
+
+    if(time<=3){
+        el.style.color="red";
+    }else{
+        el.style.color="white";
+    }
+}
+
+// ===== 時間切れ =====
+function timeUp(){
+    let buttons=document.querySelectorAll(".choice");
+
+    buttons.forEach((b,i)=>{
+        b.disabled=true;
+        if(i===currentAnswer) b.classList.add("correct");
+    });
+
+    miss++;
+    play("wrong.mp3");
+
+    updateUI();
+
+    if(miss>=3){ gameOver(); return; }
+
+    document.getElementById("next").style.display="block";
+}
+
+// ===== 判定 =====
+function checkAnswer(i){
+    clearInterval(timer);
+
+    let buttons=document.querySelectorAll(".choice");
+
+    buttons.forEach((b,index)=>{
+        b.disabled=true;
+        if(index===currentAnswer) b.classList.add("correct");
+        if(index===i && i!==currentAnswer) b.classList.add("wrong");
+    });
+
+    if(i===currentAnswer){
+        score++;
+        play("correct.mp3");
+    }else{
+        miss++;
+        play("wrong.mp3");
+    }
+
+    updateUI();
+
+    if(miss>=3){ gameOver(); return; }
+    if(score>=30){ clearGame(); return; }
+
+    document.getElementById("next").style.display="block";
+}
+
+// ===== UI =====
+function updateUI(){
+    document.getElementById("score").textContent="スコア: "+score;
+    document.getElementById("miss").textContent="ミス: "+miss+"/3";
+
+    if(score>0 && score%5===0){
+        let img=document.getElementById("image");
+        img.src=difficulty+(score/5)+".png";
+        img.style.display="block";
+    }
+}
+
+// ===== 次へ =====
+document.getElementById("next").onclick=()=>{
+    nextQuestion();
+};
+
+// ===== クリア =====
+function clearGame(){
+    if(difficulty==="easy"){
+        unlocked.normal=true;
+        document.getElementById("normalBtn").disabled=false;
+    }
+    if(difficulty==="normal"){
+        unlocked.hard=true;
+        document.getElementById("hardBtn").disabled=false;
+    }
+
+    document.getElementById("game").innerHTML=
+    `<h2>クリア！</h2>
+    <p>30問正解！</p>
+    <button onclick="location.reload()">戻る</button>`;
+}
+
+// ===== ゲームオーバー =====
+function gameOver(){
+    document.getElementById("game").innerHTML=
+    `<h2>ゲームオーバー</h2>
+    <p>スコア:${score}</p>
+    <button onclick="location.reload()">もう一度</button>`;
+}
+</script>
+
+</body>
+</html>
